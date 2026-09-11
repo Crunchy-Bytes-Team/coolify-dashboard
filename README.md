@@ -123,32 +123,50 @@ separate `METRICS_GATEWAY_TOKEN` and `METRICS_READER_TOKEN` values. It does not 
 
 ## Deploy the dashboard on a private server
 
-`deploy/coolify-dashboard.yaml` is an example for a Compose resource managed
-through Coolify. Prepare these host directories under
-`/var/coolify/coolify-dashboard`:
+Use a **Git-based Application** in Coolify to build the dashboard from this
+repository and deploy automatically on pushes to `main`. Prepare these host
+directories under `/var/coolify/coolify-dashboard`:
 
 | Directory | Contents | Mount |
 | --- | --- | --- |
-| `app` | `service.py`, `alerts.py`, `dist/`, and `gateway.yaml` | `/app`, read only |
 | `config` | Your actual `servers.json` | `/config`, read only |
 | `secrets` | `dashboard.env` and any private CA certificates | `/run/secrets`, read only |
 | `data` | SQLite database, WAL, and SHM files | `/data`, writable |
 
-Use `deploy/coolify-gateway.yaml` as `app/gateway.yaml`. Transfer files through
-a private channel and allow the container user, UID/GID `10001:10001`, to read
+Transfer configuration and secrets through a private channel and allow the
+container user, UID/GID `10001:10001`, to read
 the mounted files and write the data directory. Restrict access to data and
 secrets. Docker Compose reads the `.env` file on the host.
 
 To migrate an active database, use SQLite's `backup` API. Do not copy just the
 database file while WAL writes are in progress.
 
-Replace `dashboard.example.com` in `DASHBOARD_ALLOWED_HOSTS` and configure
-the domain in Coolify with internal port `3090`. The dashboard does not publish
-a host port directly; Coolify's proxy connects to the container.
+1. In Coolify, create an application using **Private Repository (with GitHub
+   App)**. This option also supports public repositories. Select your GitHub
+   integration, this repository, and branch `main`.
+2. Select **Docker Compose**, base directory `/`, and Compose location
+   `/compose.coolify.yaml`. Load the Compose file from the repository.
+3. Set the runtime variable `DASHBOARD_ALLOWED_HOSTS` to your dashboard hostname
+   (without the scheme or port), and set the `dashboard` service domain with
+   internal port `3090`, for example `https://dashboard.example.com:3090`.
+4. Enable **Auto Deploy** and deploy. Verify a subsequent push to `main` creates
+   a deployment for that commit. The GitHub App webhook must be reachable by
+   GitHub; the dashboard itself can remain private.
 
-To update the application, transfer the files in `app` and restart the resource.
-Do not overwrite `data`. Include all files in `dist/`, including `i18n.js`,
-when updating the frontend.
+Coolify builds the root `Dockerfile` from the selected commit. Application code
+is part of the image; do not mount a host directory over `/app`, as that would
+hide the newly built code. Configuration, credentials and the SQLite database
+stay in the persistent host folders. The dashboard publishes no host port;
+Coolify's proxy connects to the container.
+
+When migrating from the standalone Compose service, stop the old service before
+starting the Git application against the same database. Reuse the existing
+domain and host folders, and keep only one collector running against that database.
+Changing the resource in Coolify does not require a database migration.
+
+`deploy/coolify-dashboard.yaml` remains available as a standalone Compose
+example with manually transferred source files in an `app` folder. It does not
+provide automatic Git deployments; use `compose.coolify.yaml` for that workflow.
 
 The dashboard **does not include a login**. Keep it behind a private network/VPN
 or an authenticating proxy. Host validation limits allowed names; it does not

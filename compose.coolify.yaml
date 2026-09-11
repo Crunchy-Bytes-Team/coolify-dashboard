@@ -1,0 +1,33 @@
+# Git-based Coolify application: base directory /, Compose location /compose.coolify.yaml.
+# Prepare config, secrets and data on the deployment host before the first deploy.
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose: ["3090"]
+    environment:
+      BIND_HOST: 0.0.0.0
+      CONFIG_FILE: /config/servers.json
+      DATABASE_FILE: /data/metrics.sqlite
+      WEB_ROOT: /app/dist
+      DASHBOARD_ALLOWED_HOSTS: "${DASHBOARD_ALLOWED_HOSTS:?Set the dashboard hostname in Coolify}"
+    env_file:
+      - /var/coolify/coolify-dashboard/secrets/dashboard.env
+    volumes:
+      - /var/coolify/coolify-dashboard/config:/config:ro
+      - /var/coolify/coolify-dashboard/secrets:/run/secrets:ro
+      - /var/coolify/coolify-dashboard/data:/data
+    read_only: true
+    tmpfs: ["/tmp:size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1536m
+    cpus: 2.0
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3090/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
