@@ -130,13 +130,18 @@ directories under `/var/coolify/coolify-dashboard`:
 | Directory | Contents | Mount |
 | --- | --- | --- |
 | `config` | Your actual `servers.json` | `/config`, read only |
-| `secrets` | `dashboard.env` and any private CA certificates | `/run/secrets`, read only |
+| `secrets` | Gateway token files and any private CA certificates | `/run/secrets`, read only |
 | `data` | SQLite database, WAL, and SHM files | `/data`, writable |
 
 Transfer configuration and secrets through a private channel and allow the
 container user, UID/GID `10001:10001`, to read
 the mounted files and write the data directory. Restrict access to data and
-secrets. Docker Compose reads the `.env` file on the host.
+secrets. For Git-based deployments, configure each server with
+`"token_file": "/run/secrets/gateway-token.txt"` (using a different file for each
+gateway) and omit `token_env` for that server. Each file contains only its token.
+Coolify manages the application's Compose environment files, so the Git template
+uses these mounted token files rather than an external `env_file`. Credentials
+are never included in the image or committed to the repository.
 
 To migrate an active database, use SQLite's `backup` API. Do not copy just the
 database file while WAL writes are in progress.

@@ -13,8 +13,6 @@ services:
       DATABASE_FILE: /data/metrics.sqlite
       WEB_ROOT: /app/dist
       DASHBOARD_ALLOWED_HOSTS: "${DASHBOARD_ALLOWED_HOSTS:?Set the dashboard hostname in Coolify}"
-    env_file:
-      - /var/coolify/coolify-dashboard/secrets/dashboard.env
     volumes:
       - /var/coolify/coolify-dashboard/config:/config:ro
       - /var/coolify/coolify-dashboard/secrets:/run/secrets:ro
