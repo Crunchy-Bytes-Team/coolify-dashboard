@@ -1,0 +1,14 @@
+{
+  "poll_seconds": 30,
+  "retention_days": 90,
+  "servers": [
+    {
+      "id": "server-01",
+      "name": "Example server",
+      "enabled": false,
+      "url": "https://metrics.example.com",
+      "token_env": "METRICS_GATEWAY_TOKEN",
+      "sentinel_retention_days": 7
+    }
+  ]
+}

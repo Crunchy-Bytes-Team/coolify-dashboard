@@ -1,0 +1,37 @@
+# Prepare these host folders before deploying through the Coolify UI.
+# Set the matching private domain in Coolify with internal port 3090.
+services:
+  dashboard:
+    image: python:3.13-slim
+    user: "10001:10001"
+    working_dir: /app
+    command: [python, service.py, dashboard]
+    restart: unless-stopped
+    expose: ["3090"]
+    environment:
+      BIND_HOST: 0.0.0.0
+      CONFIG_FILE: /config/servers.json
+      DATABASE_FILE: /data/metrics.sqlite
+      WEB_ROOT: /app/dist
+      DASHBOARD_ALLOWED_HOSTS: dashboard.example.com
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    env_file:
+      - /var/coolify/coolify-dashboard/secrets/dashboard.env
+    volumes:
+      - /var/coolify/coolify-dashboard/app:/app:ro
+      - /var/coolify/coolify-dashboard/config:/config:ro
+      - /var/coolify/coolify-dashboard/secrets:/run/secrets:ro
+      - /var/coolify/coolify-dashboard/data:/data
+    read_only: true
+    tmpfs: ["/tmp:size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1536m
+    cpus: 2.0
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3090/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

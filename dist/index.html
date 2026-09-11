@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Sentinel · Infrastruttura</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Vai ai dati</a>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Sentinel, panoramica"><img src="/favicon.svg" alt="" width="28" height="28">Sentinel <span>Infrastruttura</span></a>
+    <div class="top-actions"><span class="local">Dashboard privata</span><button id="alarm-toggle" type="button">Allarmi</button><button id="refresh" type="button">Aggiorna</button></div>
+  </header>
+  <div class="layout">
+    <aside aria-label="Selezione server">
+      <details class="nav-section" name="sidebar-sections" id="nav-servers" open>
+        <summary>Server <span id="server-count">0</span></summary>
+        <nav id="servers" aria-label="Server monitorati"><p class="muted">Caricamento…</p></nav>
+      </details>
+      <details class="nav-section" name="sidebar-sections" id="nav-projects">
+        <summary>Progetti <span id="project-count">0</span></summary>
+        <nav id="projects" aria-label="Risorse per progetto"><p class="muted">Caricamento…</p></nav>
+      </details>
+      <div class="aside-note"><span class="eyebrow">Sorgente dei dati</span><strong>Coolify Sentinel</strong><p>CPU e memoria raccolte sui server e conservate dalla dashboard.</p></div>
+      <details class="settings"><summary>Raccolta e storico</summary><p id="collection-info">Lettura della configurazione…</p><p>La raccolta continua con Docker attivo. Dopo una pausa recupera i campioni ancora disponibili su Sentinel.</p></details>
+    </aside>
+    <main id="main">
+      <div class="page-heading"><div><p class="eyebrow">Panoramica del server</p><h1 id="server-name">Infrastruttura</h1><p id="server-subtitle" class="muted">Lettura delle informazioni…</p></div><span id="connection" class="badge" role="status">In attesa</span></div>
+      <p id="error" class="notice error" role="alert" hidden></p>
+      <p id="alarm-banner" class="notice" role="status" hidden></p>
+      <details id="alarm-settings" class="alarm-settings">
+        <summary>Allarmi e Non disturbare <span id="alarm-mode" class="muted"></span></summary>
+        <form id="alarm-form">
+          <div class="alarm-switches">
+            <label><input id="alarms-enabled" type="checkbox" checked> Allarmi attivi</label>
+            <label><input id="alarm-sound" type="checkbox" checked> Suono</label>
+            <label><input id="dnd-manual" type="checkbox"> Non disturbare adesso</label>
+          </div>
+          <div class="alarm-fields">
+            <label>CPU server (%)<input id="alarm-cpu" type="number" min="1" max="100" step="1" value="80" required></label>
+            <label>RAM server (%)<input id="alarm-memory" type="number" min="1" max="100" step="1" value="80" required></label>
+            <label>Durata minima (secondi)<input id="alarm-duration" type="number" min="10" max="1800" step="10" value="30" required></label>
+          </div>
+          <div class="alarm-switches">
+            <label><input id="dnd-schedule" type="checkbox" checked> Non disturbare ogni giorno</label>
+            <label>Dalle <input id="dnd-start" type="time" value="00:00" required></label>
+            <label>Alle <input id="dnd-end" type="time" value="06:00" required></label>
+          </div>
+          <p class="muted alarm-help">Ora locale: <span id="alarm-timezone"></span>. Se CPU o RAM restano sopra soglia, l’avviso si ripete ogni 5 minuti. Durante Non disturbare rimane solo l’avviso visivo; alla fine della fascia viene segnalato un eventuale superamento ancora attivo.</p>
+          <button type="submit">Salva impostazioni</button>
+        </form>
+        <details class="alarm-resource-settings">
+          <summary>Regola per il server o la risorsa selezionata</summary>
+          <form id="resource-alarm-form">
+            <p id="alarm-target" class="muted">Seleziona una risorsa dalla dashboard.</p>
+            <div class="alarm-fields">
+              <label>CPU (%)<input id="resource-alarm-cpu" type="number" min="1" max="10000" value="80" required></label>
+              <label><span id="resource-memory-label">RAM (%)</span><input id="resource-alarm-memory" type="number" min="1" value="80" required></label>
+              <label>Durata (secondi)<input id="resource-alarm-duration" type="number" min="10" max="1800" step="10" value="30" required></label>
+            </div>
+            <button type="submit">Salva regola per questa risorsa</button>
+          </form>
+          <ul id="alarm-rules" class="alarm-rules"></ul>
+        </details>
+        <div class="alarm-actions"><button id="enable-alerts" type="button">Abilita notifiche e audio</button><button id="test-alert" type="button">Prova avviso</button></div>
+        <p id="alarm-permission" class="muted alarm-help" role="status"></p>
+        <p id="alarm-feedback" class="alarm-help" role="status"></p>
+        <p class="muted alarm-help">Per ricevere gli allarmi tieni aperta una scheda della dashboard, anche in background, con il dispositivo acceso. Browser e sistema possono ritardare gli avvisi; con la scheda chiusa o il dispositivo in stop non vengono riprodotti. La raccolta continua finché il server della dashboard è attivo. Le preferenze sono salvate in questo browser.</p>
+      </details>
+      <section id="setup" class="setup" hidden aria-labelledby="setup-title"><div class="setup-mark" aria-hidden="true">↗</div><div><h2 id="setup-title">Pronto per il primo collegamento</h2><p>La dashboard è attiva. Collega un gateway HTTPS per iniziare a vedere CPU, memoria e applicazioni.</p><p class="muted">I grafici appariranno con i primi campioni reali.</p></div></section>
+      <section aria-labelledby="history-heading">
+        <div class="section-heading"><div><h2 id="history-heading">Andamento delle risorse</h2><p id="entity-caption" class="muted">Totale del server</p></div><label class="period">Periodo<select id="period"><option value="1">Ultima ora</option><option value="6">Ultime 6 ore</option><option value="24" selected>Ultime 24 ore</option><option value="168">Ultimi 7 giorni</option><option value="720">Ultimi 30 giorni</option><option value="2160">Ultimi 90 giorni</option></select></label></div>
+        <button id="back-server" class="text-button" type="button" hidden>← Torna al totale del server</button>
+        <div class="charts">
+          <figure class="chart cpu"><figcaption><span>CPU</span><strong id="cpu-value">—</strong></figcaption><p id="cpu-freshness" class="chart-time">Nessun campione</p><div id="cpu-chart" class="plot"><p class="plot-empty">In attesa dei dati CPU</p></div><p id="cpu-summary" class="chart-summary">Utilizzo CPU nel periodo selezionato</p></figure>
+          <figure class="chart memory"><figcaption><span>Memoria</span><strong id="memory-value">—</strong></figcaption><p id="memory-freshness" class="chart-time">Nessun campione</p><div id="memory-chart" class="plot"><p class="plot-empty">In attesa dei dati RAM</p></div><p id="memory-summary" class="chart-summary">Memoria utilizzata nel periodo selezionato</p></figure>
+        </div>
+        <p class="chart-footnote">Le interruzioni nei grafici indicano dati mancanti. La CPU dei container può superare il 100% quando usa più core.</p>
+      </section>
+      <section class="resources" aria-labelledby="resources-heading">
+        <div class="section-heading"><div><h2 id="resources-heading">Applicazioni e container <span id="resource-count" class="count">0</span></h2><p class="muted">Seleziona una risorsa per consultarne lo storico.</p></div><div class="table-controls"><label><span class="sr-only">Cerca una risorsa</span><input id="search" type="search" placeholder="Cerca una risorsa…" autocomplete="off"></label><label><span class="sr-only">Ordina le risorse</span><select id="sort"><option value="name">Nome</option><option value="cpu">CPU più alta</option><option value="memory">RAM più alta</option></select></label></div></div>
+        <div class="table-scroll"><table><thead><tr><th scope="col">Risorsa</th><th scope="col">Stato dei dati</th><th scope="col" class="number">CPU</th><th scope="col" class="number">RAM</th><th scope="col">Ultimo campione</th></tr></thead><tbody id="resource-rows"><tr><td colspan="5" class="table-empty">L'inventario comparirà dopo il collegamento del gateway.</td></tr></tbody></table></div>
+      </section>
+      <footer><span>Solo lettura · Nessun accesso SSH</span><span id="updated" aria-live="polite">In attesa di collegamento</span></footer>
+    </main>
+  </div>
+</body>
+</html>

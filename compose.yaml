@@ -1,0 +1,30 @@
+name: coolify-dashboard
+services:
+  dashboard:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3090:3090"
+    environment:
+      BIND_HOST: 0.0.0.0
+      CONFIG_FILE: /config/servers.json
+      DATABASE_FILE: /data/metrics.sqlite
+      WEB_ROOT: /app/dist
+    env_file:
+      - ./secrets/dashboard.env
+    volumes:
+      - ./config/servers.json:/config/servers.json:ro
+      - ./secrets:/run/secrets:ro
+      - metrics-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3090/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  metrics-data:
