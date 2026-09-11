@@ -2,6 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const source=fs.readFileSync('dist/app.js','utf8').split('// ALARM CORE START')[1].split('// ALARM CORE END')[0];
 const core=vm.runInNewContext(source+';({quietNow,alertDue})',{Date});
 const defaults={enabled:true,manual:false,schedule:true,start:'00:00',end:'06:00'};
+const {createI18n}=require('../dist/i18n.js');
 const at=(hour,minute=0)=>new Date(2026,8,11,hour,minute);
 test('default quiet hours include midnight and exclude 06:00',()=>{
   assert.equal(core.quietNow(defaults,at(0)),true);
@@ -42,7 +43,7 @@ function deliveryFixture(settings) {
     createOscillator:()=>({frequency:{},connect(){},start(){counts.tones++;},stop(){}}),
     createGain:()=>({gain:{setValueAtTime(){},linearRampToValueAtTime(){}},connect(){}})};
   const fn=vm.runInNewContext(source+delivery+';deliverAlarm',{
-    Date,alarmSettings:{...defaults,schedule:false,sound:true,...settings},audioContext,Notification,window:{Notification}});
+    Date,tr:createI18n(null,['en']).t,fmt:new Intl.NumberFormat('en-GB'),alarmSettings:{...defaults,schedule:false,sound:true,...settings},audioContext,Notification,window:{Notification}});
   return {counts,send:()=>fn([{name:'Test host'}])};
 }
 test('delivery sends a notification and three audio tones when allowed',()=>{

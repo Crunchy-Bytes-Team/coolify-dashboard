@@ -7,14 +7,16 @@
   <title>Sentinel · Infrastruttura</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
+  <script src="/i18n.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">Vai ai dati</a>
   <header class="topbar">
     <a class="brand" href="/" aria-label="Sentinel, panoramica"><img src="/favicon.svg" alt="" width="28" height="28">Sentinel <span>Infrastruttura</span></a>
-    <div class="top-actions"><span class="local">Dashboard privata</span><button id="alarm-toggle" type="button">Allarmi</button><button id="refresh" type="button">Aggiorna</button></div>
+    <div class="top-actions"><span class="local">Dashboard privata</span><label class="language-control"><span class="sr-only">Lingua</span><select id="language" aria-label="Lingua"><option value="it" lang="it">Italiano</option><option value="en" lang="en">English</option></select></label><button id="alarm-toggle" type="button">Allarmi</button><button id="refresh" type="button">Aggiorna</button></div>
   </header>
+  <p id="language-feedback" class="sr-only" role="status"></p>
   <div class="layout">
     <aside aria-label="Selezione server">
       <details class="nav-section" name="sidebar-sections" id="nav-servers" open>

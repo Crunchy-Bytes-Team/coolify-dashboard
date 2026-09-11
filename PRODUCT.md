@@ -14,7 +14,7 @@ Read existing Sentinel metrics over authenticated HTTPS, retain them in SQLite, 
 
 ## Brand Personality
 
-Essential, legible, practical. Italian interface, familiar controls, clear units and timestamps.
+Essential, legible, practical. Italian and English interface, familiar controls, clear units and timestamps. Respect the browser's language initially and keep an explicit language selector with a saved preference.
 
 ## Anti-references
 

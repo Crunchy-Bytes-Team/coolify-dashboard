@@ -29,3 +29,11 @@ Show CPU and host RAM as percentages. RAM uses the total from the same Sentinel 
 ## Alarms
 
 A collapsible panel holds global server thresholds, optional resource rules, browser/audio activation and a test action. Default thresholds are 80% for server CPU/RAM over 30 seconds, repeating every 5 minutes. Resource memory thresholds use MiB. Daily quiet hours default to 00:00–06:00 in the browser's local timezone, with configurable times and a manual override. Quiet hours silence both delivery channels while retaining the visual status. Clearly disclose permissions, page-open requirements and background timing limitations.
+
+## Language
+
+Use a native language select in the header with the autonyms Italiano and English.
+Switch static and dynamic labels, accessible names, notifications, dates and numbers
+without reloading the page or resetting input drafts. Keep infrastructure names and
+time zones unchanged. Follow the browser language on first visit, falling back to
+English, and persist explicit choices separately from alert settings.

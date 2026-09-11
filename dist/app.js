@@ -1,9 +1,12 @@
 "use strict";
 const $ = id => document.getElementById(id);
-const state = {server:null,entity:"server",resources:[],hours:24,revision:0};
-const statusText = {fresh:"Aggiornato",stale:"Dati non recenti",waiting:"In attesa",error:"Lettura incompleta",partial:"Dati parziali"};
-const fmt = new Intl.NumberFormat("it-IT",{maximumFractionDigits:1});
-const timeFmt = new Intl.DateTimeFormat("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+const i18n = window.SentinelI18n;
+const tr = (message, values) => i18n.t(message, values);
+const state = {server:null,entity:"server",resources:[],hours:24,revision:0,overview:null,projects:null,charts:{},updatedAt:null,lastError:null};
+const statusKeys = {fresh:"Aggiornato",stale:"Dati non recenti",waiting:"In attesa",error:"Lettura incompleta",partial:"Dati parziali"};
+const statusText = new Proxy(statusKeys,{get:(labels,key)=>tr(labels[key]||"In attesa")});
+let fmt = new Intl.NumberFormat(i18n.locale,{maximumFractionDigits:1});
+let timeFmt = new Intl.DateTimeFormat(i18n.locale,{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
 function valueText(value,metric) {
   if(value===null || value===undefined) return "—";
   if(metric==="cpu") return fmt.format(value)+"%";
@@ -12,10 +15,10 @@ function valueText(value,metric) {
   return fmt.format(value/1024)+" KiB";
 }
 function relative(ts) {
-  if(!ts) return "Nessun campione";
+  if(!ts) return tr("Nessun campione");
   const seconds = Math.max(0,Math.floor((Date.now()-ts)/1000));
-  if(seconds<60) return seconds+" s fa";
-  if(seconds<3600) return Math.floor(seconds/60)+" min fa";
+  if(seconds<60) return tr("{count} s fa",{count:fmt.format(seconds)});
+  if(seconds<3600) return tr("{count} min fa",{count:fmt.format(Math.floor(seconds/60))});
   return timeFmt.format(ts);
 }
 function node(tag,className,text) {
@@ -24,7 +27,7 @@ function node(tag,className,text) {
   if(text!==undefined)element.textContent=text;
   return element;
 }
-function badge(status,text) { return node("span","badge "+status,text||statusText[status]||"In attesa"); }
+function badge(status,text) { return node("span","badge "+status,text||statusText[status]||tr("In attesa")); }
 async function api(path) {
   const response=await fetch(path,{cache:"no-store",signal:AbortSignal.timeout(15000)});
   const data=await response.json();
@@ -41,9 +44,9 @@ function renderServers(servers) {
     if(high)button.classList.add("high-usage");
     button.setAttribute("aria-current",String(server.id===state.server));
     button.append(node("strong","",server.name));
-    button.append(node("span","",!server.enabled?"Da collegare":server.error?"Gateway non raggiungibile":fresh?"CPU "+valueText(server.metrics.cpu,"cpu")+" · RAM "+valueText(server.metrics.memory_percent,"cpu"):"In attesa di campioni recenti"));
-    if(high)button.append(node("span","usage-warning","⚠ Utilizzo elevato"));
-    button.title=fresh?"Soglia di attenzione: CPU o RAM ≥ 80%. "+(server.metrics.memory_total?"RAM: "+valueText(server.metrics.memory,"memory")+" su "+valueText(server.metrics.memory_total,"memory")+".":"Percentuale RAM non disponibile: manca la memoria totale."):"";
+    button.append(node("span","",!server.enabled?tr("Da collegare"):server.error?tr("Gateway non raggiungibile"):fresh?"CPU "+valueText(server.metrics.cpu,"cpu")+" · RAM "+valueText(server.metrics.memory_percent,"cpu"):tr("In attesa di campioni recenti")));
+    if(high)button.append(node("span","usage-warning",tr("⚠ Utilizzo elevato")));
+    button.title=fresh?tr("Soglia di attenzione: CPU o RAM ≥ 80%. ")+(server.metrics.memory_total?tr("RAM: {used} su {total}.",{used:valueText(server.metrics.memory,"memory"),total:valueText(server.metrics.memory_total,"memory")}):tr("Percentuale RAM non disponibile: manca la memoria totale.")):"";
     button.addEventListener("click",()=>{state.server=server.id;state.entity="server";refresh();});
     $("servers").append(button);
   }
@@ -52,27 +55,26 @@ function renderTable() {
   const query=$("search").value.trim().toLocaleLowerCase();
   const sort=$("sort").value;
   const resources=state.resources.filter(row=>row.id!=="server" && (row.name+" "+row.project).toLocaleLowerCase().includes(query));
-  resources.sort((a,b)=>sort==="name"?a.name.localeCompare(b.name):((b[sort]??-1)-(a[sort]??-1)));
+  resources.sort((a,b)=>sort==="name"?a.name.localeCompare(b.name,i18n.locale):((b[sort]??-1)-(a[sort]??-1)));
   $("resource-count").textContent=state.resources.filter(r=>r.id!=="server").length;
   const body=$("resource-rows");body.replaceChildren();
   if(!resources.length) {
-    const row=node("tr"),cell=node("td","table-empty",query?"Nessuna risorsa corrisponde alla ricerca.":"L'inventario comparirà dopo il collegamento del gateway.");
+    const row=node("tr"),cell=node("td","table-empty",query?tr("Nessuna risorsa corrisponde alla ricerca."):tr("L'inventario comparirà dopo il collegamento del gateway."));
     cell.colSpan=5;row.append(cell);body.append(row);return;
   }
   for(const resource of resources) {
     const row=node("tr"),title=node("td"),button=node("button","resource-link",resource.name);
     button.type="button";button.addEventListener("click",()=>{state.entity=resource.id;refresh();});
-    title.append(button,node("p","resource-project",[resource.project,resource.kind==="application"?"Applicazione":resource.kind==="database"?"Database":resource.kind==="service"?"Servizio":"Container",resource.running===0?"Non in esecuzione":""].filter(Boolean).join(" · ")));
+    title.append(button,node("p","resource-project",[resource.project,resource.kind==="application"?tr("Applicazione"):resource.kind==="database"?"Database":resource.kind==="service"?tr("Servizio"):"Container",resource.running===0?tr("Non in esecuzione"):""].filter(Boolean).join(" · ")));
     const status=node("td");status.append(badge(resource.status));
     const at=Math.min(resource.cpu_at||0,resource.memory_at||0);
-    const date=node("td","muted",relative(at));if(at)date.title=new Date(at).toLocaleString("it-IT");
+    const date=node("td","muted",relative(at));if(at)date.title=new Date(at).toLocaleString(i18n.locale);
     row.append(title,status,node("td","number",valueText(resource.cpu,"cpu")),node("td","number",valueText(resource.memory,"memory")),date);
     body.append(row);
   }
 }
-async function refreshProjects() {
-  try {
-    const data=await api('/api/projects');
+function renderProjects(data) {
+    state.projects=data;
     $('project-count').textContent=data.projects.length;
     $('projects').replaceChildren();
     for(const project of data.projects) {
@@ -87,8 +89,11 @@ async function refreshProjects() {
       }
       $('projects').append(group);
     }
-    if(!data.projects.length)$('projects').append(node('p','muted','Nessun progetto disponibile.'));
-  } catch { $('projects').replaceChildren(node('p','muted','Elenco progetti non disponibile.')); }
+    if(!data.projects.length)$('projects').append(node('p','muted',tr('Nessun progetto disponibile.')));
+}
+async function refreshProjects() {
+  try { renderProjects(await api('/api/projects')); }
+  catch { state.projects=null;$('projects').replaceChildren(node('p','muted',tr('Elenco progetti non disponibile.'))); }
 }
 function svgNode(tag,attrs,text) {
   const element=document.createElementNS("http://www.w3.org/2000/svg",tag);
@@ -97,13 +102,14 @@ function svgNode(tag,attrs,text) {
   return element;
 }
 function renderChart(metric,data,entity) {
+  state.charts[metric]={data,entity};
   const area=$(metric+"-chart");
   area.replaceChildren();
   $(metric+"-value").textContent=valueText(entity?.[metric],metric);
-  $(metric+"-freshness").textContent=entity?.[metric+"_at"]?"Ultimo campione · "+relative(entity[metric+"_at"]):"Nessun campione";
+  $(metric+"-freshness").textContent=entity?.[metric+"_at"]?tr("Ultimo campione · ")+relative(entity[metric+"_at"]):tr("Nessun campione");
   if(!data.samples.length) {
-    area.append(node("p","plot-empty","Nessun campione in questo periodo"));
-    $(metric+"-summary").textContent="I dati mancanti non vengono rappresentati come zero.";
+    area.append(node("p","plot-empty",tr("Nessun campione in questo periodo")));
+    $(metric+"-summary").textContent=tr("I dati mancanti non vengono rappresentati come zero.");
     return;
   }
   const points=data.samples;
@@ -112,15 +118,15 @@ function renderChart(metric,data,entity) {
   const left=56,right=588,up=15,bottom=168;
   const x=ts=>left+(ts-data.from)/(data.to-data.from)*(right-left);
   const y=value=>bottom-value/top*(bottom-up);
-  const svg=svgNode("svg",{viewBox:"0 0 610 200",role:"img","aria-label":(metric==="cpu"?"CPU":"Memoria")+", andamento nelle ultime "+state.hours+" ore"});
-  svg.append(svgNode("title",{},metric==="cpu"?"Utilizzo CPU":"Memoria utilizzata"));
+  const svg=svgNode("svg",{viewBox:"0 0 610 200",role:"img","aria-label":tr("{metric}, andamento nelle ultime {hours} ore",{metric:metric==="cpu"?"CPU":tr("Memoria"),hours:fmt.format(state.hours)})});
+  svg.append(svgNode("title",{},metric==="cpu"?tr("Utilizzo CPU"):tr("Memoria utilizzata")));
   for(let i=0;i<=3;i++) {
     const value=top*i/3,position=y(value);
     svg.append(svgNode("line",{x1:left,x2:right,y1:position,y2:position,class:"grid"}));
     svg.append(svgNode("text",{x:left-8,y:position+4,"text-anchor":"end"},valueText(value,metric)));
   }
   for(const [ts,anchor] of [[data.from,"start"],[(data.from+data.to)/2,"middle"],[data.to,"end"]]) {
-    const text=new Date(ts).toLocaleString("it-IT",state.hours>24?{day:"2-digit",month:"short"}:{hour:"2-digit",minute:"2-digit"});
+    const text=new Date(ts).toLocaleString(i18n.locale,state.hours>24?{day:"2-digit",month:"short"}:{hour:"2-digit",minute:"2-digit"});
     svg.append(svgNode("text",{x:x(ts),y:191,"text-anchor":anchor},text));
   }
   let path="",previous=null;
@@ -135,7 +141,40 @@ function renderChart(metric,data,entity) {
   area.append(svg);
   const weight=points.reduce((s,p)=>s+p.count,0);
   const average=points.reduce((s,p)=>s+p.value*p.count,0)/weight;
-  $(metric+"-summary").textContent="Media "+valueText(average,metric)+" · Picco "+valueText(maximum,metric)+" · Solo campioni disponibili";
+  $(metric+"-summary").textContent=tr("Media {average} · Picco {peak} · Solo campioni disponibili",{average:valueText(average,metric),peak:valueText(maximum,metric)});
+}
+function renderOverview(overview) {
+  state.overview=overview;
+    if(!state.server)state.server=overview.servers[0]?.id;
+    renderServers(overview.servers);
+    const server=overview.servers.find(s=>s.id===state.server);
+    $("collection-info").textContent=tr("Sincronizzazione ogni {seconds} secondi. Conservazione: {days} giorni.",{seconds:fmt.format(overview.poll_seconds),days:fmt.format(overview.retention_days)});
+    if(!server) {
+      $("server-name").textContent=tr("Nessun server configurato");
+      $("setup").hidden=false;
+      return null;
+    }
+    $("server-name").textContent=server.name;
+    $("server-subtitle").textContent=server.enabled?(server.contacted?tr("Ultimo contatto con il gateway · ")+relative(server.contacted):tr("In attesa del primo contatto con il gateway")):tr("Server pilota · Gateway HTTPS da collegare");
+    $("setup").hidden=server.enabled;
+    $("error").hidden=!server.error;
+    $("error").textContent=server.error?i18n.error(server.error):"";
+    const connection=server.enabled?(server.error?"error":server.metrics?.status||"waiting"):"waiting";
+    $("connection").className="badge "+connection;
+    $("connection").textContent=server.enabled?statusText[connection]:tr("Da collegare");
+    return server;
+}
+function renderEntityCaption() {
+  const entity=state.resources.find(r=>r.id===state.entity);
+  $("entity-caption").textContent=state.entity==="server"?tr("Totale del server"):(entity?.name||tr("Risorsa"))+tr(" · storico dei container associati");
+}
+function renderUpdated() {
+  if(state.updatedAt)$("updated").textContent=tr("Vista aggiornata alle ")+new Date(state.updatedAt).toLocaleTimeString(i18n.locale,{hour:"2-digit",minute:"2-digit"});
+}
+function showViewError(message) {
+  state.lastError=message;
+  $("error").textContent=i18n.error(message);$("error").hidden=false;
+  $("connection").textContent=tr("Vista non aggiornata");$("connection").className="badge stale";
 }
 async function refresh() {
   const revision=++state.revision;
@@ -143,39 +182,23 @@ async function refresh() {
   try {
     const overview=await api("/api/overview");
     if(revision!==state.revision)return;
-    if(!state.server)state.server=overview.servers[0]?.id;
-    renderServers(overview.servers);
+    const server=renderOverview(overview);
     refreshProjects();
-    const server=overview.servers.find(s=>s.id===state.server);
-    $("collection-info").textContent="Sincronizzazione ogni "+overview.poll_seconds+" secondi. Conservazione: "+overview.retention_days+" giorni.";
-    if(!server) {
-      $("server-name").textContent="Nessun server configurato";
-      $("setup").hidden=false;
-      return;
-    }
-    $("server-name").textContent=server.name;
-    $("server-subtitle").textContent=server.enabled?(server.contacted?"Ultimo contatto con il gateway · "+relative(server.contacted):"In attesa del primo contatto con il gateway"):"Server pilota · Gateway HTTPS da collegare";
-    $("setup").hidden=server.enabled;
-    $("error").hidden=!server.error;
-    $("error").textContent=server.error||"";
-    const connection=server.enabled?(server.error?"error":server.metrics?.status||"waiting"):"waiting";
-    $("connection").className="badge "+connection;
-    $("connection").textContent=server.enabled?statusText[connection]:"Da collegare";
+    if(!server)return;
     const prefix="?"+new URLSearchParams({server:state.server});
     const entityParams=new URLSearchParams({server:state.server,entity:state.entity,hours:state.hours});
     const [resources,cpu,memory]=await Promise.all([api("/api/resources"+prefix),api("/api/history?"+entityParams+"&metric=cpu"),api("/api/history?"+entityParams+"&metric=memory")]);
     if(revision!==state.revision)return;
     state.resources=resources.resources;
     const entity=state.resources.find(r=>r.id===state.entity);
-    $("entity-caption").textContent=state.entity==="server"?"Totale del server":(entity?.name||"Risorsa")+" · storico dei container associati";
+    renderEntityCaption();
     $("back-server").hidden=state.entity==="server";
     renderChart("cpu",cpu,entity);renderChart("memory",memory,entity);renderTable();
     updateAlarmTarget();
-    $("updated").textContent="Vista aggiornata alle "+new Date().toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"});
+    state.lastError=null;state.updatedAt=Date.now();renderUpdated();
   }catch(error){
     if(revision!==state.revision)return;
-    $("error").textContent=error.name==="TimeoutError"?"La richiesta ha impiegato troppo tempo. Nuovo tentativo automatico.":error.message;
-    $("error").hidden=false;$("connection").textContent="Vista non aggiornata";$("connection").className="badge stale";
+    showViewError(error.name==="TimeoutError"?"La richiesta ha impiegato troppo tempo. Nuovo tentativo automatico.":error.message);
   }finally{
     if(revision===state.revision)$("refresh").disabled=false;
   }
@@ -207,7 +230,7 @@ const alarmDefaults={enabled:true,sound:true,manual:false,schedule:true,start:'0
 function readStored(key,fallback) {try {return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}}
 function writeStored(key,value) {
   try {localStorage.setItem(key,JSON.stringify(value));return true;}
-  catch {$('alarm-feedback').textContent='Il browser non consente di salvare le preferenze. Mantieni aperta una sola scheda.';return false;}
+  catch {setFeedback(tr('Il browser non consente di salvare le preferenze. Mantieni aperta una sola scheda.'));return false;}
 }
 function validRule(rule) {
   return rule&&Number.isFinite(rule.cpu)&&rule.cpu>=1&&rule.cpu<=10000&&
@@ -224,6 +247,8 @@ function loadAlarmSettings() {
   return result;
 }
 let alarmSettings=loadAlarmSettings(),alarmRevision=0,alarmBusy=false,audioContext=null,lastAlarmTarget='',deliveryMemory={};
+let feedback=null,lastAlarmSummary=null;
+function setFeedback(message,values={}) { feedback={message:i18n.source(message),values};$('alarm-feedback').textContent=tr(feedback.message,values); }
 function fillAlarmForm() {
   for(const [id,key] of [['alarms-enabled','enabled'],['alarm-sound','sound'],['dnd-manual','manual'],['dnd-schedule','schedule']])$(id).checked=alarmSettings[key];
   for(const [id,key] of [['alarm-cpu','cpu'],['alarm-memory','memory'],['alarm-duration','seconds'],['dnd-start','start'],['dnd-end','end']])$(id).value=alarmSettings[key];
@@ -231,17 +256,19 @@ function fillAlarmForm() {
   renderAlarmRules();permissionStatus();
 }
 function permissionStatus() {
-  const permission=!('Notification' in window)?'Notifiche non supportate in questo browser':Notification.permission==='granted'?'Notifiche autorizzate':Notification.permission==='denied'?'Notifiche bloccate: consentile nelle impostazioni del browser':'Notifiche da autorizzare';
-  $('alarm-permission').textContent=permission+' · '+(audioContext?.state==='running'?'Audio pronto':'Audio da abilitare per questa scheda')+'.';
+  $('enable-alerts').textContent=tr(window.isSecureContext?'Abilita notifiche e audio':'Abilita audio');
+  const permission=!window.isSecureContext?tr('Notifiche non disponibili su HTTP'):!('Notification' in window)?tr('Notifiche non supportate in questo browser'):Notification.permission==='granted'?tr('Notifiche autorizzate'):Notification.permission==='denied'?tr('Notifiche bloccate: consentile nelle impostazioni del browser'):tr('Notifiche da autorizzare');
+  $('alarm-permission').textContent=permission+' · '+(audioContext?.state==='running'?tr('Audio pronto'):tr('Audio da abilitare per questa scheda'))+'.';
 }
 function updateAlarmTarget() {
   const key=state.server+'|'+state.entity;
+  $('resource-memory-label').textContent=state.entity==='server'?tr('RAM (%)'):tr('RAM (MiB utilizzati)');
   if(key===lastAlarmTarget)return;
   lastAlarmTarget=key;
   const resource=state.resources.find(r=>r.id===state.entity);
   const rule=alarmSettings.rules.find(r=>r.server===state.server&&r.entity===state.entity);
   $('alarm-target').textContent=$('server-name').textContent+(state.entity==='server'?'': ' / '+(resource?.name||state.entity));
-  $('resource-memory-label').textContent=state.entity==='server'?'RAM (%)':'RAM (MiB utilizzati)';
+  $('resource-memory-label').textContent=state.entity==='server'?tr('RAM (%)'):tr('RAM (MiB utilizzati)');
   $('resource-alarm-memory').max=state.entity==='server'?100:10485760;
   $('resource-alarm-cpu').value=rule?.cpu??alarmSettings.cpu;
   $('resource-alarm-memory').value=rule?.memory??(state.entity==='server'?alarmSettings.memory:512);
@@ -251,12 +278,12 @@ function renderAlarmRules() {
   $('alarm-rules').replaceChildren();
   for(const rule of alarmSettings.rules) {
     const item=node('li');
-    item.append(node('span','',`${rule.name} · CPU > ${rule.cpu}% o RAM > ${rule.memory}${rule.entity==='server'?'%':' MiB'} per ${rule.seconds} s`));
-    const remove=node('button','','Rimuovi');remove.type='button';remove.setAttribute('aria-label','Rimuovi regola '+rule.name);
+    item.append(node('span','',tr("{name} · CPU > {cpu}% o RAM > {memory}{unit} per {seconds} s",{name:rule.name,cpu:fmt.format(rule.cpu),memory:fmt.format(rule.memory),unit:rule.entity==='server'?'%':' MiB',seconds:fmt.format(rule.seconds)})));
+    const remove=node('button','',tr('Rimuovi'));remove.type='button';remove.setAttribute('aria-label',tr('Rimuovi regola ')+rule.name);
     remove.addEventListener('click',()=>{alarmSettings.rules=alarmSettings.rules.filter(r=>r!==rule);saveAlarmSettings();renderAlarmRules();lastAlarmTarget='';updateAlarmTarget();});
     item.append(remove);$('alarm-rules').append(item);
   }
-  if(!alarmSettings.rules.length)$('alarm-rules').append(node('li','muted','Tutti i server usano le soglie generali. Aggiungi qui eventuali regole specifiche; per le applicazioni la RAM è espressa in MiB.'));
+  if(!alarmSettings.rules.length)$('alarm-rules').append(node('li','muted',tr('Tutti i server usano le soglie generali. Aggiungi qui eventuali regole specifiche; per le applicazioni la RAM è espressa in MiB.')));
 }
 function saveAlarmSettings() {
   alarmRevision++;writeStored(SETTINGS_KEY,alarmSettings);pollAlarms();
@@ -276,12 +303,20 @@ function deliverAlarm(targets,test=false) {
   if(!alarmSettings.enabled||quietNow(alarmSettings))return false;
   let sent=false;
   if('Notification' in window&&Notification.permission==='granted')try {
-    const notification=new Notification(test?'Sentinel · Prova avviso':'Sentinel · Utilizzo elevato',{
-      body:test?'Notifiche attive. Il suono viene riprodotto se abilitato.':targets.slice(0,3).map(t=>t.name).join('\n')+(targets.length>3?`\nAltre ${targets.length-3} risorse`:''),tag:'sentinel-alerts',silent:true});
+    const notification=new Notification(test?tr('Sentinel · Prova avviso'):tr('Sentinel · Utilizzo elevato'),{
+      body:test?tr('Notifiche attive. Il suono viene riprodotto se abilitato.'):targets.slice(0,3).map(t=>t.name).join('\n')+(targets.length>3?"\n"+tr("Altre {count} risorse",{count:fmt.format(targets.length-3)}):''),tag:'sentinel-alerts',silent:true});
     notification.onclick=()=>{window.focus();if(targets[0]){state.server=targets[0].server;state.entity=targets[0].entity;refresh();}notification.close();};
     sent=true;
   }catch{/* Audio remains available if the browser cannot display notifications. */}
   return soundAlarm()||sent;
+}
+function renderAlarmSummary(summary) {
+  if(!summary)return;
+  lastAlarmSummary=summary;
+  const {active,failures,unknown}=summary,quiet=quietNow(alarmSettings);
+    $('alarm-mode').textContent=!alarmSettings.enabled?tr('Disattivati'):quiet?tr('Non disturbare attivo'):active.length?tr("{count} in corso",{count:fmt.format(active.length)}):tr('Attivi');
+    $('alarm-banner').hidden=!active.length&&!failures&&!unknown;
+    $('alarm-banner').textContent=(active.length?tr('Sopra soglia: ')+active.map(t=>t.name).join(', ')+'. ':'')+(!alarmSettings.enabled?tr('Allarmi disattivati. '):quiet?tr('Non disturbare: notifiche e suono silenziati. '):'')+((failures||unknown)?tr('Verifica incompleta: alcuni dati non sono disponibili.'):'');
 }
 async function pollAlarms() {
   if(alarmBusy)return;
@@ -302,9 +337,7 @@ async function pollAlarms() {
     });
     const active=[...targets.values()].filter(t=>t.state==='active'),unknown=[...targets.values()].filter(t=>t.state==='unknown').length;
     const quiet=quietNow(alarmSettings);
-    $('alarm-mode').textContent=!alarmSettings.enabled?'Disattivati':quiet?'Non disturbare attivo':active.length?`${active.length} in corso`:'Attivi';
-    $('alarm-banner').hidden=!active.length&&!failures&&!unknown;
-    $('alarm-banner').textContent=(active.length?'Sopra soglia: '+active.map(t=>t.name).join(', ')+'. ':'')+(!alarmSettings.enabled?'Allarmi disattivati. ':quiet?'Non disturbare: notifiche e suono silenziati. ':'')+((failures||unknown)?'Verifica incompleta: alcuni dati non sono disponibili.':'');
+    renderAlarmSummary({active,failures,unknown});
     const checkAndDeliver=()=>{
       if(revision!==alarmRevision)return;
       const stored=readStored(DELIVERY_KEY,{}),records=stored&&typeof stored==='object'&&!Array.isArray(stored)?stored:{};
@@ -318,37 +351,50 @@ async function pollAlarms() {
     };
     if(navigator.locks)await navigator.locks.request('sentinel-alert-delivery',{ifAvailable:true},lock=>{if(lock)checkAndDeliver();});
     else checkAndDeliver();
-  }catch {$('alarm-mode').textContent='Verifica non disponibile';}
+  }catch {$('alarm-mode').textContent=tr('Verifica non disponibile');}
   finally {alarmBusy=false;}
 }
 $('alarm-toggle').addEventListener('click',()=>{$('alarm-settings').open=!$('alarm-settings').open;if($('alarm-settings').open)$('alarm-settings').scrollIntoView({block:'start'});});
 $('alarm-form').addEventListener('submit',event=>{
   event.preventDefault();
-  if($('dnd-start').value===$('dnd-end').value){$('alarm-feedback').textContent='Scegli orari di inizio e fine diversi.';return;}
+  if($('dnd-start').value===$('dnd-end').value){setFeedback(tr('Scegli orari di inizio e fine diversi.'));return;}
   for(const [id,key] of [['alarms-enabled','enabled'],['alarm-sound','sound'],['dnd-manual','manual'],['dnd-schedule','schedule']])alarmSettings[key]=$(id).checked;
   for(const [id,key] of [['alarm-cpu','cpu'],['alarm-memory','memory'],['alarm-duration','seconds']])alarmSettings[key]=Number($(id).value);
   alarmSettings.start=$('dnd-start').value;alarmSettings.end=$('dnd-end').value;
-  $('alarm-feedback').textContent='Impostazioni salvate. Promemoria ogni 5 minuti durante il superamento.';saveAlarmSettings();
+  setFeedback(tr('Impostazioni salvate. Promemoria ogni 5 minuti durante il superamento.'));saveAlarmSettings();
 });
 $('resource-alarm-form').addEventListener('submit',event=>{
   event.preventDefault();if(!state.server)return;
   const rule={server:state.server,entity:state.entity,name:$('alarm-target').textContent,cpu:Number($('resource-alarm-cpu').value),memory:Number($('resource-alarm-memory').value),seconds:Number($('resource-alarm-duration').value)};
   const others=alarmSettings.rules.filter(r=>r.server!==rule.server||r.entity!==rule.entity);
-  if(others.length>=20){$('alarm-feedback').textContent='Puoi salvare al massimo 20 regole specifiche.';return;}
+  if(others.length>=20){setFeedback(tr('Puoi salvare al massimo 20 regole specifiche.'));return;}
   if(!validRule(rule))return;
-  alarmSettings.rules=[...others,rule];saveAlarmSettings();renderAlarmRules();$('alarm-feedback').textContent='Regola salvata per '+rule.name+'.';
+  alarmSettings.rules=[...others,rule];saveAlarmSettings();renderAlarmRules();setFeedback("Regola salvata per {name}.",{name:rule.name});
 });
 $('enable-alerts').addEventListener('click',async()=>{
   try {
     const Audio=window.AudioContext||window.webkitAudioContext;
     if(Audio&&!audioContext)audioContext=new Audio();
     const resumed=audioContext?.resume();
-    const permission='Notification' in window&&Notification.permission==='default'?Notification.requestPermission():Promise.resolve();
+    const permission=window.isSecureContext&&'Notification' in window&&Notification.permission==='default'?Notification.requestPermission():Promise.resolve();
     await Promise.allSettled([resumed,permission]);permissionStatus();pollAlarms();
   }catch {permissionStatus();}
 });
 $('test-alert').addEventListener('click',()=>{
-  $('alarm-feedback').textContent=!alarmSettings.enabled?'Attiva gli allarmi prima della prova.':quietNow(alarmSettings)?'Non disturbare è attivo: prova silenziata.':deliverAlarm([],true)?'Avviso di prova inviato.':'Premi “Abilita notifiche e audio” per preparare gli avvisi.';
+  setFeedback(!alarmSettings.enabled?tr('Attiva gli allarmi prima della prova.'):quietNow(alarmSettings)?tr('Non disturbare è attivo: prova silenziata.'):deliverAlarm([],true)?tr('Avviso di prova inviato.'):tr('Premi “Abilita notifiche e audio” per preparare gli avvisi.'));
 });
 window.addEventListener('storage',event=>{if(event.key===SETTINGS_KEY){alarmSettings=loadAlarmSettings();alarmRevision++;fillAlarmForm();lastAlarmTarget='';updateAlarmTarget();pollAlarms();}});
 fillAlarmForm();setInterval(pollAlarms,10000);pollAlarms();
+
+window.addEventListener('sentinel-language-change',()=>{
+  fmt=new Intl.NumberFormat(i18n.locale,{maximumFractionDigits:1});
+  timeFmt=new Intl.DateTimeFormat(i18n.locale,{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+  if(state.overview)renderOverview(state.overview);
+  if(state.projects)renderProjects(state.projects);
+  else $('projects').replaceChildren(node('p','muted',tr('Elenco progetti non disponibile.')));
+  renderTable();renderEntityCaption();
+  for(const [metric,{data,entity}] of Object.entries(state.charts))renderChart(metric,data,entity);
+  renderUpdated();if(state.lastError)showViewError(state.lastError);
+  renderAlarmRules();updateAlarmTarget();permissionStatus();renderAlarmSummary(lastAlarmSummary);
+  if(feedback)$('alarm-feedback').textContent=tr(feedback.message,feedback.values);
+});

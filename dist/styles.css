@@ -14,3 +14,6 @@
 @media(max-width:760px){.alarm-fields{grid-template-columns:1fr}.alarm-settings>summary span{display:block;margin:8px 0 0 18px}.nav-section{margin-bottom:6px;padding-bottom:6px}.top-actions{gap:8px}#projects{max-height:360px;overflow:auto}}
 .server-button.high-usage[aria-current=true]{box-shadow:inset 0 0 0 1px var(--usage-color)}
 @media(prefers-color-scheme:dark){.server-button.high-usage{--usage-color:oklch(78% .125 60);--usage-bg:oklch(26% .04 55);--usage-border:oklch(50% .10 55)}}
+/* Native language control; keep the header usable on narrow screens. */
+.language-control{display:flex;align-items:center}.language-control select{max-width:112px}
+@media(max-width:480px){.topbar{height:auto;min-height:64px;flex-wrap:wrap;gap:12px;padding-top:14px;padding-bottom:14px}.top-actions{width:100%;justify-content:flex-end}}
